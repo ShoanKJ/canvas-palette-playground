@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Canvas as FabricCanvas, Circle, Rect, Line, PencilBrush, FabricObject, Polygon, FabricText } from "fabric";
+import { Canvas as FabricCanvas, Circle, Rect, Line, PencilBrush, FabricObject } from "fabric";
 import { Button } from "./ui/button";
 import { 
   Brush, 
@@ -23,7 +23,7 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  Triangle,
+  Hexagon,
   Palette
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -48,17 +48,16 @@ const tools: Tool[] = [
   { id: "line", name: "Line", icon: Minus, shortcut: "L" },
   { id: "rectangle", name: "Rectangle", icon: Square, shortcut: "R" },
   { id: "circle", name: "Circle", icon: CircleIcon, shortcut: "C" },
-  { id: "triangle", name: "Triangle", icon: Triangle, shortcut: "T" },
-  { id: "text", name: "Text", icon: Type, shortcut: "X" },
+  { id: "text", name: "Text", icon: Type, shortcut: "T" },
+  { id: "polygon", name: "Polygon", icon: Hexagon, shortcut: "P" },
   { id: "move", name: "Pan", icon: Move, shortcut: "Space" },
 ];
 
 const colorPresets = [
-  "#000000", "#FFFFFF", "#C0C0C0", "#808080", "#800000", "#FF0000",
-  "#800080", "#FF00FF", "#000080", "#0000FF", "#008080", "#00FFFF",
-  "#008000", "#00FF00", "#808000", "#FFFF00", "#FFA500", "#964B00",
-  "#FFC0CB", "#FF69B4", "#DDA0DD", "#9370DB", "#87CEEB", "#98FB98",
-  "#F0E68C", "#FFE4B5", "#FFDAB9", "#D2691E", "#A0522D", "#8B4513"
+  "#000000", "#ffffff", "#ff0000", "#00ff00", "#0000ff", 
+  "#ffff00", "#ff00ff", "#00ffff", "#ffa500", "#800080",
+  "#ffc0cb", "#a52a2a", "#808080", "#000080", "#008000",
+  "#964B00", "#FFC0CB", "#FFFF99", "#FFE4E1", "#E6E6FA"
 ];
 
 export const DrawingCanvas = () => {
@@ -94,27 +93,19 @@ export const DrawingCanvas = () => {
 
     // Add event listeners for drawing completion
     canvas.on('path:created', () => {
-      setTimeout(saveState, 10);
+      saveState();
+    });
+
+    canvas.on('object:added', () => {
+      saveState();
     });
 
     // Mouse events for shape drawing
     canvas.on('mouse:down', (e) => {
-      if (['line', 'rectangle', 'circle', 'triangle'].includes(activeTool)) {
+      if (['line', 'rectangle', 'circle'].includes(activeTool)) {
         setIsDrawing(true);
         const pointer = canvas.getPointer(e.e);
         setStartPoint({ x: pointer.x, y: pointer.y });
-      } else if (activeTool === 'text') {
-        const pointer = canvas.getPointer(e.e);
-        const text = new FabricText('Double click to edit', {
-          left: pointer.x,
-          top: pointer.y,
-          fontFamily: 'Arial',
-          fontSize: 20,
-          fill: strokeColor,
-        });
-        canvas.add(text);
-        canvas.setActiveObject(text);
-        setTimeout(saveState, 10);
       }
     });
 
@@ -139,7 +130,6 @@ export const DrawingCanvas = () => {
             stroke: strokeColor,
             strokeWidth: strokeWidth,
             fill: '',
-            opacity: opacity / 100,
           });
           break;
         case 'rectangle':
@@ -151,7 +141,6 @@ export const DrawingCanvas = () => {
             stroke: strokeColor,
             strokeWidth: strokeWidth,
             fill: hasFill ? fillColor : 'transparent',
-            opacity: opacity / 100,
           });
           break;
         case 'circle':
@@ -163,22 +152,6 @@ export const DrawingCanvas = () => {
             stroke: strokeColor,
             strokeWidth: strokeWidth,
             fill: hasFill ? fillColor : 'transparent',
-            opacity: opacity / 100,
-          });
-          break;
-        case 'triangle':
-          const triangleWidth = pointer.x - startPoint.x;
-          const triangleHeight = pointer.y - startPoint.y;
-          const points = [
-            { x: startPoint.x + triangleWidth / 2, y: startPoint.y },
-            { x: startPoint.x + triangleWidth, y: startPoint.y + triangleHeight },
-            { x: startPoint.x, y: startPoint.y + triangleHeight }
-          ];
-          shape = new Polygon(points, {
-            stroke: strokeColor,
-            strokeWidth: strokeWidth,
-            fill: hasFill ? fillColor : 'transparent',
-            opacity: opacity / 100,
           });
           break;
       }
@@ -200,7 +173,7 @@ export const DrawingCanvas = () => {
         const lastObject = objects[objects.length - 1];
         if (lastObject && lastObject.isTemp) {
           lastObject.isTemp = false;
-          setTimeout(saveState, 10);
+          saveState();
         }
       }
     });
@@ -257,15 +230,7 @@ export const DrawingCanvas = () => {
   const saveState = useCallback(() => {
     if (!fabricCanvas) return;
     
-    // Filter out temporary objects before saving state
-    const objects = fabricCanvas.getObjects() as ExtendedFabricObject[];
-    const nonTempObjects = objects.filter(obj => !obj.isTemp);
-    
-    const state = JSON.stringify({
-      ...fabricCanvas.toJSON(),
-      objects: nonTempObjects
-    });
-    
+    const state = JSON.stringify(fabricCanvas.toJSON());
     const newHistory = history.slice(0, historyStep + 1);
     newHistory.push(state);
     setHistory(newHistory);
@@ -460,27 +425,27 @@ export const DrawingCanvas = () => {
             {/* Color Palette */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-canvas-text-muted">Colors:</span>
-              <div className="grid grid-cols-10 gap-1">
-                {colorPresets.map((color) => (
+              <div className="flex gap-1">
+                {colorPresets.slice(0, 10).map((color) => (
                   <button
                     key={color}
                     onClick={() => setStrokeColor(color)}
                     className={cn(
-                      "w-5 h-5 border transition-all hover:scale-110",
-                      strokeColor === color ? "border-2 border-canvas-active shadow-canvas-glow" : "border border-canvas-border"
+                      "w-6 h-6 border-2 transition-all hover:scale-110",
+                      strokeColor === color ? "border-canvas-active shadow-canvas-glow" : "border-canvas-border"
                     )}
                     style={{ backgroundColor: color }}
                     title={`Select ${color}`}
                   />
                 ))}
+                <input
+                  type="color"
+                  value={strokeColor}
+                  onChange={(e) => setStrokeColor(e.target.value)}
+                  className="w-6 h-6 border-2 border-canvas-border rounded cursor-pointer"
+                  title="Custom color"
+                />
               </div>
-              <input
-                type="color"
-                value={strokeColor}
-                onChange={(e) => setStrokeColor(e.target.value)}
-                className="w-6 h-6 border-2 border-canvas-border rounded cursor-pointer ml-2"
-                title="Custom color"
-              />
             </div>
 
             {/* Separator */}
@@ -520,19 +485,6 @@ export const DrawingCanvas = () => {
                     title="Fill color"
                   />
                 )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-canvas-text-muted">Opacity:</span>
-                <input
-                  type="range"
-                  min="10"
-                  max="100"
-                  value={opacity}
-                  onChange={(e) => setOpacity(Number(e.target.value))}
-                  className="w-20"
-                />
-                <span className="text-xs w-8 text-center">{opacity}%</span>
               </div>
             </div>
           </div>
